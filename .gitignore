@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+*.log
+apps/worker/python/__pycache__
+models/
+stems_data/
+docker-compose.override.yml
+.claude/

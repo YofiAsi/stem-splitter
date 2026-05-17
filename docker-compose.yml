@@ -1,0 +1,83 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-stemsplit}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-stemsplit}
+      - POSTGRES_DB=${POSTGRES_DB:-stemsplit}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stemsplit} -d ${POSTGRES_DB:-stemsplit}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    image: stem-splitter-api
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER:-stemsplit}:${POSTGRES_PASSWORD:-stemsplit}@postgres:5432/${POSTGRES_DB:-stemsplit}
+      - STEMS_DIR=/var/stems
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - stems_data:/var/stems
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-4000}:4000"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "node -e \"fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  worker:
+    image: stem-splitter-worker-nvidia
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile.nvidia
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER:-stemsplit}:${POSTGRES_PASSWORD:-stemsplit}@postgres:5432/${POSTGRES_DB:-stemsplit}
+      - STEMS_DIR=/var/stems
+      - DEMUCS_MODEL=htdemucs
+      - DEMUCS_DEVICE=cuda
+    volumes:
+      - stems_data:/var/stems
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    image: stem-splitter-web
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  stems_data:
