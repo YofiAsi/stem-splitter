@@ -4,7 +4,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { JobParamsSchema, STEM_NAMES } from "@stem-splitter/shared";
-import { pool } from "../db.js";
+import { getJob } from "../db.js";
 import { env } from "../env.js";
 import { sanitize } from "../util/sanitize.js";
 
@@ -29,19 +29,8 @@ export async function registerStemRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: "unknown_stem" });
       }
 
-      const { rows } = await pool.query<{
-        status: string;
-        format: "mp3" | "wav";
-        mode: "split" | "original";
-        source_title: string | null;
-        source_video_id: string;
-      }>(
-        `SELECT status, format, mode, source_title, source_video_id
-         FROM jobs WHERE id = $1`,
-        [id],
-      );
-      if (rows.length === 0) return reply.code(404).send({ error: "not_found" });
-      const job = rows[0];
+      const job = getJob(id);
+      if (!job) return reply.code(404).send({ error: "not_found" });
       if (job.status !== "ready") {
         return reply.code(409).send({ error: "not_ready", status: job.status });
       }

@@ -3,8 +3,13 @@ import { Readable } from "node:stream";
 import type { FastifyInstance } from "fastify";
 
 vi.mock("../../src/db.js", () => ({
-  pool: { query: vi.fn() },
   ensureSchema: vi.fn(),
+  reconcileOrphans: vi.fn(() => 0),
+  insertJob: vi.fn(),
+  getJob: vi.fn(),
+  deleteJob: vi.fn(),
+  loadJob: vi.fn(),
+  setJobStatus: vi.fn(),
 }));
 
 vi.mock("../../src/ytdlp.js", () => ({
@@ -28,7 +33,7 @@ vi.mock("node:fs", async (importOriginal) => {
 });
 
 import { build } from "../../src/index.js";
-import { pool } from "../../src/db.js";
+import { getJob } from "../../src/db.js";
 import { stat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 
@@ -60,7 +65,7 @@ describe("GET /api/jobs/:id/stems/:name", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(pool.query).mockResolvedValue({ rows: [readyJob()], rowCount: 1 } as any);
+    vi.mocked(getJob).mockReturnValue(readyJob() as any);
     vi.mocked(stat).mockResolvedValue({ size: FILE_SIZE } as any);
     vi.mocked(createReadStream).mockReturnValue(Readable.from(Buffer.alloc(64)) as any);
   });
@@ -76,10 +81,7 @@ describe("GET /api/jobs/:id/stems/:name", () => {
   });
 
   it("returns audio/wav content-type for wav format", async () => {
-    vi.mocked(pool.query).mockResolvedValue({
-      rows: [readyJob({ format: "wav" })],
-      rowCount: 1,
-    } as any);
+    vi.mocked(getJob).mockReturnValue(readyJob({ format: "wav" }) as any);
     const res = await app.inject({
       method: "GET",
       url: `/api/jobs/${TEST_UUID}/stems/vocals`,
@@ -138,7 +140,7 @@ describe("GET /api/jobs/:id/stems/:name", () => {
   });
 
   it("returns 404 when job not found", async () => {
-    vi.mocked(pool.query).mockResolvedValue({ rows: [], rowCount: 0 } as any);
+    vi.mocked(getJob).mockReturnValue(undefined);
     const res = await app.inject({
       method: "GET",
       url: `/api/jobs/${TEST_UUID}/stems/vocals`,
@@ -148,10 +150,7 @@ describe("GET /api/jobs/:id/stems/:name", () => {
   });
 
   it("returns 409 when job is not ready", async () => {
-    vi.mocked(pool.query).mockResolvedValue({
-      rows: [readyJob({ status: "downloading" })],
-      rowCount: 1,
-    } as any);
+    vi.mocked(getJob).mockReturnValue(readyJob({ status: "downloading" }) as any);
     const res = await app.inject({
       method: "GET",
       url: `/api/jobs/${TEST_UUID}/stems/vocals`,
@@ -161,10 +160,7 @@ describe("GET /api/jobs/:id/stems/:name", () => {
   });
 
   it("returns 404 when requesting stem on original-mode job", async () => {
-    vi.mocked(pool.query).mockResolvedValue({
-      rows: [readyJob({ mode: "original" })],
-      rowCount: 1,
-    } as any);
+    vi.mocked(getJob).mockReturnValue(readyJob({ mode: "original" }) as any);
     const res = await app.inject({
       method: "GET",
       url: `/api/jobs/${TEST_UUID}/stems/vocals`,
@@ -174,10 +170,7 @@ describe("GET /api/jobs/:id/stems/:name", () => {
   });
 
   it("allows 'original' stem on original-mode job", async () => {
-    vi.mocked(pool.query).mockResolvedValue({
-      rows: [readyJob({ mode: "original" })],
-      rowCount: 1,
-    } as any);
+    vi.mocked(getJob).mockReturnValue(readyJob({ mode: "original" }) as any);
     const res = await app.inject({
       method: "GET",
       url: `/api/jobs/${TEST_UUID}/stems/original`,
@@ -208,10 +201,7 @@ describe("GET /api/jobs/:id/stems/:name", () => {
   });
 
   it("uses source_video_id in filename when title is null", async () => {
-    vi.mocked(pool.query).mockResolvedValue({
-      rows: [readyJob({ source_title: null })],
-      rowCount: 1,
-    } as any);
+    vi.mocked(getJob).mockReturnValue(readyJob({ source_title: null }) as any);
     const res = await app.inject({
       method: "GET",
       url: `/api/jobs/${TEST_UUID}/stems/vocals?download=1`,

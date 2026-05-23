@@ -2,8 +2,13 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import type { FastifyInstance } from "fastify";
 
 vi.mock("../../src/db.js", () => ({
-  pool: { query: vi.fn() },
   ensureSchema: vi.fn(),
+  reconcileOrphans: vi.fn(() => 0),
+  insertJob: vi.fn(),
+  getJob: vi.fn(),
+  deleteJob: vi.fn(),
+  loadJob: vi.fn(),
+  setJobStatus: vi.fn(),
 }));
 
 vi.mock("../../src/ytdlp.js", () => ({
@@ -28,7 +33,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 });
 
 import { build } from "../../src/index.js";
-import { pool } from "../../src/db.js";
+import { insertJob, getJob } from "../../src/db.js";
 import { ytdlpSearch, isYtVideoUnavailableMessage } from "../../src/ytdlp.js";
 import { enqueueSplit } from "../../src/jobs/enqueueSplit.js";
 
@@ -43,7 +48,7 @@ function jobRow(overrides = {}) {
     source_video_id: "dQw4w9WgXcW",
     source_title: "Test Song",
     error: null,
-    created_at: new Date("2024-01-01T00:00:00Z"),
+    created_at: "2024-01-01T00:00:00.000Z",
     ...overrides,
   };
 }
@@ -62,7 +67,7 @@ describe("Job routes", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(pool.query).mockResolvedValue({ rows: [], rowCount: 1 } as any);
+    vi.mocked(getJob).mockReturnValue(undefined);
     vi.mocked(enqueueSplit).mockResolvedValue(undefined);
   });
 
@@ -115,9 +120,9 @@ describe("Job routes", () => {
         url: "/api/jobs",
         payload: { videoId: "dQw4w9WgXcW" },
       });
-      const queryCall = vi.mocked(pool.query).mock.calls[0];
-      expect(queryCall[1]).toContain("mp3");
-      expect(queryCall[1]).toContain("split");
+      const arg = vi.mocked(insertJob).mock.calls[0][0];
+      expect(arg.format).toBe("mp3");
+      expect(arg.mode).toBe("split");
     });
 
     it("returns 400 when name yields no playable result", async () => {
@@ -184,7 +189,7 @@ describe("Job routes", () => {
 
   describe("GET /api/jobs/:id", () => {
     it("returns job view for existing job", async () => {
-      vi.mocked(pool.query).mockResolvedValueOnce({ rows: [jobRow()], rowCount: 1 } as any);
+      vi.mocked(getJob).mockReturnValueOnce(jobRow() as any);
       const res = await app.inject({ method: "GET", url: `/api/jobs/${TEST_UUID}` });
       expect(res.statusCode).toBe(200);
       const body = res.json();
@@ -199,7 +204,7 @@ describe("Job routes", () => {
     });
 
     it("returns 404 when job not found", async () => {
-      vi.mocked(pool.query).mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+      vi.mocked(getJob).mockReturnValueOnce(undefined);
       const res = await app.inject({ method: "GET", url: `/api/jobs/${TEST_UUID}` });
       expect(res.statusCode).toBe(404);
       expect(res.json()).toEqual({ error: "not_found" });
@@ -211,20 +216,16 @@ describe("Job routes", () => {
     });
 
     it("includes error field when job has failed", async () => {
-      vi.mocked(pool.query).mockResolvedValueOnce({
-        rows: [jobRow({ status: "failed", error: "download_timeout" })],
-        rowCount: 1,
-      } as any);
+      vi.mocked(getJob).mockReturnValueOnce(
+        jobRow({ status: "failed", error: "download_timeout" }) as any,
+      );
       const res = await app.inject({ method: "GET", url: `/api/jobs/${TEST_UUID}` });
       expect(res.statusCode).toBe(200);
       expect(res.json().error).toBe("download_timeout");
     });
 
     it("returns null title when source_title is null", async () => {
-      vi.mocked(pool.query).mockResolvedValueOnce({
-        rows: [jobRow({ source_title: null })],
-        rowCount: 1,
-      } as any);
+      vi.mocked(getJob).mockReturnValueOnce(jobRow({ source_title: null }) as any);
       const res = await app.inject({ method: "GET", url: `/api/jobs/${TEST_UUID}` });
       expect(res.json().source.title).toBeNull();
     });
@@ -242,7 +243,6 @@ describe("Job routes", () => {
     });
 
     it("is idempotent when job does not exist", async () => {
-      vi.mocked(pool.query).mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
       const res = await app.inject({ method: "DELETE", url: `/api/jobs/${TEST_UUID}` });
       expect(res.statusCode).toBe(204);
     });

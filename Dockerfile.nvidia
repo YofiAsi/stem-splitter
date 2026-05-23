@@ -1,20 +1,25 @@
+# Single-container build: Fastify API + in-process worker + static React UI.
+# One Node process serves the UI, the JSON API, and runs separation jobs by
+# spawning yt-dlp / demucs (CUDA) / ffmpeg subprocesses on demand.
+
 FROM node:22-bookworm-slim AS node-builder
 RUN corepack enable
 WORKDIR /app
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json ./
-COPY apps/worker/package.json apps/worker/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
 RUN pnpm install --no-frozen-lockfile
 COPY . .
-RUN pnpm --filter @stem-splitter/shared build
-RUN pnpm --filter worker build
+RUN pnpm --filter @stem-splitter/shared build \
+  && pnpm --filter web build \
+  && pnpm --filter api build
 
 FROM nvidia/cuda:13.0.0-runtime-ubuntu22.04 AS runner
 ENV DEBIAN_FRONTEND=noninteractive
+ENV NODE_ENV=production
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
     ca-certificates \
@@ -29,7 +34,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
 
 RUN pip3 install --no-cache-dir --upgrade pip yt-dlp
 
-COPY apps/worker/python/requirements.nvidia.txt /tmp/requirements.txt
+COPY apps/api/python/requirements.nvidia.txt /tmp/requirements.txt
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
 # Pre-fetch the Demucs htdemucs model so the first job doesn't pay download cost.
@@ -38,5 +43,7 @@ RUN python3 -c "from demucs.pretrained import get_model; get_model('htdemucs')"
 WORKDIR /app
 COPY --from=node-builder /app /app
 
-WORKDIR /app/apps/worker
-CMD nvidia-smi && node dist/index.js
+EXPOSE 4000
+WORKDIR /app/apps/api
+# node:sqlite is built-in but still flagged on Node 22 (stable in Node 24+).
+CMD ["node", "--experimental-sqlite", "dist/index.js"]

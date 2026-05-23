@@ -1,4 +1,3 @@
-import type { Task } from "graphile-worker";
 import { mkdir, copyFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { env } from "../env.js";
@@ -8,8 +7,9 @@ import { separateStems } from "../steps/separate.js";
 import { toMp3, toWav } from "../steps/transcode.js";
 import { STEM_NAMES } from "@stem-splitter/shared";
 
-interface ProcessSplitPayload {
-  jobId: string;
+export interface Logger {
+  info: (msg: string) => void;
+  error: (msg: string) => void;
 }
 
 async function writeOriginal(
@@ -24,18 +24,20 @@ async function writeOriginal(
   }
 }
 
-export const processSplit: Task = async (payload, helpers) => {
-  const { jobId } = payload as ProcessSplitPayload;
-  if (!jobId) throw new Error("jobId missing from payload");
+export async function processSplit(
+  jobId: string,
+  log: Logger = console,
+): Promise<void> {
+  if (!jobId) throw new Error("jobId missing");
 
   const jobDir = path.join(env.STEMS_DIR, jobId);
   const outDir = path.join(jobDir, "out");
-  helpers.logger.info(`processSplit ${jobId} start`);
+  log.info(`processSplit ${jobId} start`);
 
   try {
-    const job = await loadJob(jobId);
+    const job = loadJob(jobId);
 
-    await setJobStatus(jobId, "downloading");
+    setJobStatus(jobId, "downloading");
     const { filePath: originalMp3 } = await downloadYouTubeAudio(
       job.source_video_id,
       jobDir,
@@ -44,18 +46,18 @@ export const processSplit: Task = async (payload, helpers) => {
     await mkdir(outDir, { recursive: true });
 
     if (job.mode === "original") {
-      await setJobStatus(jobId, "packaging");
+      setJobStatus(jobId, "packaging");
       await writeOriginal(originalMp3, outDir, job.format);
-      await setJobStatus(jobId, "ready");
-      helpers.logger.info(`processSplit ${jobId} ready (original)`);
+      setJobStatus(jobId, "ready");
+      log.info(`processSplit ${jobId} ready (original)`);
       return;
     }
 
-    await setJobStatus(jobId, "separating");
+    setJobStatus(jobId, "separating");
     const { stems, wallMs } = await separateStems(originalMp3, jobDir);
-    helpers.logger.info(`separate.py wall=${wallMs}ms`);
+    log.info(`separate.py wall=${wallMs}ms`);
 
-    await setJobStatus(jobId, "packaging");
+    setJobStatus(jobId, "packaging");
 
     for (const name of STEM_NAMES) {
       const src = stems[name];
@@ -68,13 +70,13 @@ export const processSplit: Task = async (payload, helpers) => {
 
     await writeOriginal(originalMp3, outDir, job.format);
 
-    await setJobStatus(jobId, "ready");
-    helpers.logger.info(`processSplit ${jobId} ready`);
+    setJobStatus(jobId, "ready");
+    log.info(`processSplit ${jobId} ready`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    helpers.logger.error(`processSplit ${jobId} failed: ${message}`);
-    await setJobStatus(jobId, "failed", message);
+    log.error(`processSplit ${jobId} failed: ${message}`);
+    setJobStatus(jobId, "failed", message);
     await rm(jobDir, { recursive: true, force: true }).catch(() => void 0);
     throw err;
   }
-};
+}

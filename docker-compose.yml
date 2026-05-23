@@ -1,35 +1,26 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-stemsplit}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-stemsplit}
-      - POSTGRES_DB=${POSTGRES_DB:-stemsplit}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stemsplit} -d ${POSTGRES_DB:-stemsplit}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
-  api:
-    image: stem-splitter-api
+  app:
+    image: stem-splitter
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: Dockerfile.nvidia
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER:-stemsplit}:${POSTGRES_PASSWORD:-stemsplit}@postgres:5432/${POSTGRES_DB:-stemsplit}
+      - SQLITE_PATH=/var/stems/db.sqlite
       - STEMS_DIR=/var/stems
+      - DEMUCS_MODEL=htdemucs
+      - DEMUCS_DEVICE=cuda
       - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
       - stems_data:/var/stems
-    depends_on:
-      postgres:
-        condition: service_healthy
     ports:
-      - "${API_PORT:-4000}:4000"
+      - "${PORT:-4000}:4000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     healthcheck:
       test:
         - "CMD-SHELL"
@@ -40,44 +31,5 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  worker:
-    image: stem-splitter-worker-nvidia
-    build:
-      context: .
-      dockerfile: apps/worker/Dockerfile.nvidia
-    environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER:-stemsplit}:${POSTGRES_PASSWORD:-stemsplit}@postgres:5432/${POSTGRES_DB:-stemsplit}
-      - STEMS_DIR=/var/stems
-      - DEMUCS_MODEL=htdemucs
-      - DEMUCS_DEVICE=cuda
-    volumes:
-      - stems_data:/var/stems
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      api:
-        condition: service_healthy
-    restart: unless-stopped
-
-  web:
-    image: stem-splitter-web
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-    depends_on:
-      api:
-        condition: service_healthy
-    ports:
-      - "${WEB_PORT:-3000}:3000"
-    restart: unless-stopped
-
 volumes:
-  pgdata:
   stems_data:

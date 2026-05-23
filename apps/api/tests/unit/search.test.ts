@@ -2,8 +2,13 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import type { FastifyInstance } from "fastify";
 
 vi.mock("../../src/db.js", () => ({
-  pool: { query: vi.fn() },
   ensureSchema: vi.fn(),
+  reconcileOrphans: vi.fn(() => 0),
+  insertJob: vi.fn(),
+  getJob: vi.fn(),
+  deleteJob: vi.fn(),
+  loadJob: vi.fn(),
+  setJobStatus: vi.fn(),
 }));
 
 vi.mock("../../src/ytdlp.js", () => ({
