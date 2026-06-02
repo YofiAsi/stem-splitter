@@ -2,8 +2,6 @@ import type { FastifyInstance } from "fastify";
 import { SearchQuerySchema, type SearchResultItem } from "@stem-splitter/shared";
 import { ytdlpSearch, isYtVideoUnavailableMessage, type YtDlpSearchEntry } from "../ytdlp.js";
 
-const MAX_DURATION_SEC = 600;
-
 function pickThumbnail(entry: YtDlpSearchEntry): string {
   if (entry.thumbnail) return entry.thumbnail;
   const list = entry.thumbnails ?? [];
@@ -26,8 +24,7 @@ export async function registerSearchRoutes(app: FastifyInstance): Promise<void> 
             (e) =>
               !e.is_live &&
               typeof e.duration === "number" &&
-              e.duration > 0 &&
-              e.duration < MAX_DURATION_SEC,
+              e.duration > 0,
           )
           .slice(0, 6)
           .map((e) => ({
