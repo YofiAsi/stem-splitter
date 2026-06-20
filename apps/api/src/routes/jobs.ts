@@ -59,6 +59,8 @@ export async function registerJobRoutes(app: FastifyInstance): Promise<void> {
         name?: string;
         format: StemFormat;
         mode: JobMode;
+        trimStartSeconds?: number;
+        trimEndSeconds?: number;
       };
       try {
         const { videoId, title } = await resolveSource(body);
@@ -69,6 +71,8 @@ export async function registerJobRoutes(app: FastifyInstance): Promise<void> {
           mode: body.mode,
           source_video_id: videoId,
           source_title: title,
+          trim_start_seconds: body.trimStartSeconds ?? null,
+          trim_end_seconds: body.trimEndSeconds ?? null,
         });
         await enqueueSplit(id);
         return reply.code(201).send({ jobId: id });

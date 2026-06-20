@@ -38,9 +38,17 @@ export async function processSplit(
     const job = loadJob(jobId);
 
     setJobStatus(jobId, "downloading");
+    const trim =
+      job.trim_start_seconds != null
+        ? {
+            startSeconds: job.trim_start_seconds,
+            endSeconds: job.trim_end_seconds ?? undefined,
+          }
+        : undefined;
     const { filePath: originalMp3 } = await downloadYouTubeAudio(
       job.source_video_id,
       jobDir,
+      trim,
     );
 
     await mkdir(outDir, { recursive: true });

@@ -44,6 +44,18 @@ export function isYtVideoUnavailableMessage(message: string): boolean {
   );
 }
 
+// Age-restricted / bot-check videos need YouTube login cookies, which we don't
+// have. Surface a clear, actionable message instead of a generic failure.
+export function isYtAuthRequiredMessage(message: string): boolean {
+  const s = message.toLowerCase();
+  return (
+    s.includes("sign in to confirm your age") ||
+    s.includes("confirm you're not a bot") ||
+    s.includes("confirm you are not a bot") ||
+    s.includes("use --cookies")
+  );
+}
+
 function runYtdlp(args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(env.YTDLP_BIN, args, { stdio: ["ignore", "pipe", "pipe"] });

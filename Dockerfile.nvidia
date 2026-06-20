@@ -32,7 +32,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir --upgrade pip yt-dlp
+RUN pip3 install --no-cache-dir --upgrade pip
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+    -o /usr/local/bin/yt-dlp && chmod a+rx /usr/local/bin/yt-dlp
 
 COPY apps/api/python/requirements.nvidia.txt /tmp/requirements.txt
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
@@ -45,5 +47,7 @@ COPY --from=node-builder /app /app
 
 EXPOSE 4000
 WORKDIR /app/apps/api
+COPY apps/api/entrypoint.sh /app/apps/api/entrypoint.sh
+RUN chmod +x /app/apps/api/entrypoint.sh
 # node:sqlite is built-in but still flagged on Node 22 (stable in Node 24+).
-CMD ["node", "--experimental-sqlite", "dist/index.js"]
+CMD ["/app/apps/api/entrypoint.sh"]

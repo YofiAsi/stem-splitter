@@ -10,8 +10,11 @@ import {
   type JobStatus,
   type JobView,
   type SearchResultItem,
-  type StemFormat,
 } from "./api.js";
+import {
+  DownloadOptionsModal,
+  type DownloadOptions,
+} from "./DownloadOptionsModal.js";
 import { StemPlayer } from "./StemPlayer.js";
 
 function formatDuration(sec: number): string {
@@ -70,8 +73,8 @@ export function App() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [searching, setSearching] = useState(false);
-  const [format, setFormat] = useState<StemFormat>("mp3");
-  const [mode, setMode] = useState<JobMode>("split");
+  const [selectedResult, setSelectedResult] =
+    useState<SearchResultItem | null>(null);
   const [job, setJob] = useState<JobView | null>(null);
   const [selectedSource, setSelectedSource] = useState<SelectedSource | null>(
     null,
@@ -115,10 +118,11 @@ export function App() {
 
   async function startJob(
     item: SearchResultItem,
-    mode: JobMode,
+    opts: DownloadOptions,
   ): Promise<void> {
     setError(null);
     setJob(null);
+    setSelectedResult(null);
     setSelectedSource({
       title: item.title,
       channel: item.channel,
@@ -127,8 +131,10 @@ export function App() {
     try {
       const { jobId } = await createJob({
         videoId: item.youtubeVideoId,
-        format,
-        mode,
+        format: opts.format,
+        mode: opts.mode,
+        trimStartSeconds: opts.trimStartSeconds,
+        trimEndSeconds: opts.trimEndSeconds,
       });
       const first = await getJob(jobId);
       setJob(first);
@@ -166,35 +172,11 @@ export function App() {
             <input
               className="search"
               type="text"
-              placeholder="Search for a song…"
+              placeholder="Search, or paste a YouTube link…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               autoFocus
             />
-            <div className="mode-toggle">
-              <button
-                className={mode === "split" ? "active" : ""}
-                onClick={() => setMode("split")}
-              >
-                Split
-              </button>
-              <button
-                className={mode === "original" ? "active" : ""}
-                onClick={() => setMode("original")}
-              >
-                Download original
-              </button>
-            </div>
-            <label className="format">
-              Format:
-              <select
-                value={format}
-                onChange={(e) => setFormat(e.target.value as StemFormat)}
-              >
-                <option value="mp3">mp3</option>
-                <option value="wav">wav</option>
-              </select>
-            </label>
           </div>
 
           {searching && <p className="muted">Searching…</p>}
@@ -205,7 +187,7 @@ export function App() {
               <li
                 key={r.youtubeVideoId}
                 className="result"
-                onClick={() => startJob(r, mode)}
+                onClick={() => setSelectedResult(r)}
               >
                 <img src={r.thumbnailUrl} alt="" />
                 <div className="meta">
@@ -217,6 +199,14 @@ export function App() {
               </li>
             ))}
           </ul>
+
+          {selectedResult && (
+            <DownloadOptionsModal
+              item={selectedResult}
+              onCancel={() => setSelectedResult(null)}
+              onStart={(opts) => startJob(selectedResult, opts)}
+            />
+          )}
         </>
       )}
 

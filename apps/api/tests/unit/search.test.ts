@@ -14,6 +14,7 @@ vi.mock("../../src/db.js", () => ({
 vi.mock("../../src/ytdlp.js", () => ({
   ytdlpSearch: vi.fn(),
   ytdlpInfo: vi.fn(),
+  isYtAuthRequiredMessage: vi.fn(() => false),
   isYtVideoUnavailableMessage: vi.fn((msg: string) =>
     msg.toLowerCase().includes("video unavailable") ||
     msg.toLowerCase().includes("private video") ||
@@ -28,7 +29,12 @@ vi.mock("../../src/jobs/enqueueSplit.js", () => ({
 }));
 
 import { build } from "../../src/index.js";
-import { ytdlpSearch, isYtVideoUnavailableMessage } from "../../src/ytdlp.js";
+import {
+  ytdlpSearch,
+  ytdlpInfo,
+  isYtVideoUnavailableMessage,
+  isYtAuthRequiredMessage,
+} from "../../src/ytdlp.js";
 import type { YtDlpSearchEntry } from "../../src/ytdlp.js";
 
 function makeEntry(overrides: Partial<YtDlpSearchEntry> = {}): YtDlpSearchEntry {
@@ -79,21 +85,14 @@ describe("GET /api/search", () => {
     expect(body.every((r: { youtubeVideoId: string }) => r.youtubeVideoId !== "vid0000002")).toBe(true);
   });
 
-  it("filters out duration === 600", async () => {
+  it("keeps long videos (no upper duration limit)", async () => {
     vi.mocked(ytdlpSearch).mockResolvedValueOnce([
       makeEntry({ id: "vid0000001", duration: 600 }),
       makeEntry({ id: "vid0000002", duration: 599 }),
     ]);
     const res = await app.inject({ method: "GET", url: "/api/search?q=test" });
     const body = res.json();
-    expect(body).toHaveLength(1);
-    expect(body[0].youtubeVideoId).toBe("vid0000002");
-  });
-
-  it("includes duration 599", async () => {
-    vi.mocked(ytdlpSearch).mockResolvedValueOnce([makeEntry({ duration: 599 })]);
-    const res = await app.inject({ method: "GET", url: "/api/search?q=test" });
-    expect(res.json()).toHaveLength(1);
+    expect(body).toHaveLength(2);
   });
 
   it("returns empty array when no results", async () => {
@@ -134,6 +133,47 @@ describe("GET /api/search", () => {
     ]);
     const res = await app.inject({ method: "GET", url: "/api/search?q=test" });
     expect(res.json()[0].channel).toBe("Unknown");
+  });
+
+  it("resolves a pasted YouTube URL to that single video", async () => {
+    vi.mocked(ytdlpInfo).mockResolvedValueOnce(
+      makeEntry({ id: "dQw4w9WgXcQ", title: "Direct Hit" }),
+    );
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/search?q=https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body).toHaveLength(1);
+    expect(body[0].youtubeVideoId).toBe("dQw4w9WgXcQ");
+    expect(ytdlpInfo).toHaveBeenCalledWith("dQw4w9WgXcQ");
+    expect(ytdlpSearch).not.toHaveBeenCalled();
+  });
+
+  it("resolves a bare 11-char video id directly", async () => {
+    vi.mocked(ytdlpInfo).mockResolvedValueOnce(makeEntry({ id: "abc12345678" }));
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/search?q=abc12345678",
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toHaveLength(1);
+    expect(ytdlpInfo).toHaveBeenCalledWith("abc12345678");
+    expect(ytdlpSearch).not.toHaveBeenCalled();
+  });
+
+  it("returns 422 with a clear message for age-restricted videos", async () => {
+    vi.mocked(ytdlpInfo).mockRejectedValueOnce(
+      new Error("Sign in to confirm your age"),
+    );
+    vi.mocked(isYtAuthRequiredMessage).mockReturnValueOnce(true);
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/search?q=https://www.youtube.com/watch?v=Sntj4HmuykI",
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error).toMatch(/age-restricted|sign-in/i);
   });
 
   it("returns 422 when yt-dlp says video unavailable", async () => {

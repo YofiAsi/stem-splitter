@@ -39,10 +39,19 @@ export const CreateJobBodySchema = z
     name: z.string().trim().min(1).max(200).optional(),
     format: StemFormatSchema.default("mp3"),
     mode: JobModeSchema.default("split"),
+    trimStartSeconds: z.number().int().nonnegative().optional(),
+    trimEndSeconds: z.number().int().positive().optional(),
   })
   .refine(
     (v) => [v.url, v.videoId, v.name].filter(Boolean).length === 1,
     { message: "exactly one of url, videoId, or name must be provided" },
+  )
+  .refine(
+    (v) =>
+      v.trimStartSeconds === undefined ||
+      v.trimEndSeconds === undefined ||
+      v.trimEndSeconds > v.trimStartSeconds,
+    { message: "trimEndSeconds must be greater than trimStartSeconds" },
   );
 export type CreateJobBody = z.infer<typeof CreateJobBodySchema>;
 

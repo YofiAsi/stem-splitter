@@ -31,7 +31,10 @@ const API = "/api";
 
 export async function search(q: string): Promise<SearchResultItem[]> {
   const res = await fetch(`${API}/search?q=${encodeURIComponent(q)}`);
-  if (!res.ok) throw new Error(`search failed: ${res.status}`);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `search failed: ${res.status}`);
+  }
   return (await res.json()) as SearchResultItem[];
 }
 
@@ -42,6 +45,8 @@ export async function createJob(
     name?: string;
     format: StemFormat;
     mode?: JobMode;
+    trimStartSeconds?: number;
+    trimEndSeconds?: number;
   },
 ): Promise<{ jobId: string }> {
   const res = await fetch(`${API}/jobs`, {

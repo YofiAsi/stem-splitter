@@ -20,17 +20,26 @@ db.exec("PRAGMA journal_mode = WAL;");
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS jobs (
-  id              TEXT PRIMARY KEY,
-  status          TEXT NOT NULL,
-  format          TEXT NOT NULL,
-  mode            TEXT NOT NULL DEFAULT 'split',
-  source_video_id TEXT NOT NULL,
-  source_title    TEXT,
-  error           TEXT,
-  created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  id                  TEXT PRIMARY KEY,
+  status              TEXT NOT NULL,
+  format              TEXT NOT NULL,
+  mode                TEXT NOT NULL DEFAULT 'split',
+  source_video_id     TEXT NOT NULL,
+  source_title        TEXT,
+  trim_start_seconds  INTEGER,
+  trim_end_seconds    INTEGER,
+  error               TEXT,
+  created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS jobs_created_at_idx ON jobs (created_at DESC);
 `;
+
+// Columns added after the initial release; CREATE TABLE IF NOT EXISTS won't add
+// them to a pre-existing table, so ALTER them in idempotently.
+const MIGRATIONS = [
+  "ALTER TABLE jobs ADD COLUMN trim_start_seconds INTEGER",
+  "ALTER TABLE jobs ADD COLUMN trim_end_seconds INTEGER",
+];
 
 export interface JobRecord {
   id: string;
@@ -39,6 +48,8 @@ export interface JobRecord {
   mode: "split" | "original";
   source_video_id: string;
   source_title: string | null;
+  trim_start_seconds: number | null;
+  trim_end_seconds: number | null;
   error: string | null;
   created_at: string;
 }
@@ -47,6 +58,15 @@ const NON_TERMINAL = ["queued", "downloading", "separating", "packaging"];
 
 export function ensureSchema(): void {
   db.exec(SCHEMA_SQL);
+  for (const sql of MIGRATIONS) {
+    try {
+      db.exec(sql);
+    } catch (err) {
+      // Ignore "duplicate column" — the column already exists on this DB.
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!/duplicate column/i.test(msg)) throw err;
+    }
+  }
 }
 
 export function insertJob(job: {
@@ -55,17 +75,24 @@ export function insertJob(job: {
   mode: "split" | "original";
   source_video_id: string;
   source_title: string | null;
+  trim_start_seconds?: number | null;
+  trim_end_seconds?: number | null;
 }): void {
   db.prepare(
-    `INSERT INTO jobs (id, status, format, mode, source_video_id, source_title)
-     VALUES (@id, 'queued', @format, @mode, @source_video_id, @source_title)`,
-  ).run(job);
+    `INSERT INTO jobs (id, status, format, mode, source_video_id, source_title, trim_start_seconds, trim_end_seconds)
+     VALUES (@id, 'queued', @format, @mode, @source_video_id, @source_title, @trim_start_seconds, @trim_end_seconds)`,
+  ).run({
+    ...job,
+    trim_start_seconds: job.trim_start_seconds ?? null,
+    trim_end_seconds: job.trim_end_seconds ?? null,
+  });
 }
 
 export function getJob(id: string): JobRecord | undefined {
   return db
     .prepare(
-      `SELECT id, status, format, mode, source_video_id, source_title, error, created_at
+      `SELECT id, status, format, mode, source_video_id, source_title,
+              trim_start_seconds, trim_end_seconds, error, created_at
        FROM jobs WHERE id = ?`,
     )
     .get(id) as JobRecord | undefined;
