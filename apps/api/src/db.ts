@@ -45,7 +45,7 @@ export interface JobRecord {
   id: string;
   status: string;
   format: "mp3" | "wav";
-  mode: "split" | "original";
+  mode: "split" | "original" | "no_vocals";
   source_video_id: string;
   source_title: string | null;
   trim_start_seconds: number | null;
@@ -72,7 +72,7 @@ export function ensureSchema(): void {
 export function insertJob(job: {
   id: string;
   format: "mp3" | "wav";
-  mode: "split" | "original";
+  mode: "split" | "original" | "no_vocals";
   source_video_id: string;
   source_title: string | null;
   trim_start_seconds?: number | null;

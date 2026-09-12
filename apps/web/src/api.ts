@@ -7,7 +7,7 @@ export interface SearchResultItem {
 }
 
 export type StemFormat = "mp3" | "wav";
-export type JobMode = "split" | "original";
+export type JobMode = "split" | "original" | "no_vocals";
 
 export type JobStatus =
   | "queued"

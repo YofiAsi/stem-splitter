@@ -4,7 +4,7 @@ import { env } from "../env.js";
 import { loadJob, setJobStatus } from "../db.js";
 import { downloadYouTubeAudio } from "../steps/download.js";
 import { separateStems } from "../steps/separate.js";
-import { toMp3, toWav } from "../steps/transcode.js";
+import { mixDown, toMp3, toWav } from "../steps/transcode.js";
 import { STEM_NAMES } from "@stem-splitter/shared";
 
 export interface Logger {
@@ -66,6 +66,18 @@ export async function processSplit(
     log.info(`separate.py wall=${wallMs}ms`);
 
     setJobStatus(jobId, "packaging");
+
+    if (job.mode === "no_vocals") {
+      await mixDown(
+        [stems.drums, stems.bass, stems.other],
+        outDir,
+        "no_vocals",
+        job.format,
+      );
+      setJobStatus(jobId, "ready");
+      log.info(`processSplit ${jobId} ready (no_vocals)`);
+      return;
+    }
 
     for (const name of STEM_NAMES) {
       const src = stems[name];

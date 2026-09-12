@@ -8,7 +8,7 @@ import { getJob } from "../db.js";
 import { env } from "../env.js";
 import { sanitize } from "../util/sanitize.js";
 
-const ALLOWED_NAMES = new Set<string>([...STEM_NAMES, "original"]);
+const ALLOWED_NAMES = new Set<string>([...STEM_NAMES, "original", "no_vocals"]);
 
 const StemParamsSchema = JobParamsSchema.extend({
   name: z.string(),
@@ -35,6 +35,12 @@ export async function registerStemRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(409).send({ error: "not_ready", status: job.status });
       }
       if (job.mode === "original" && name !== "original") {
+        return reply.code(404).send({ error: "stem_not_available" });
+      }
+      if (job.mode === "no_vocals" && name !== "no_vocals") {
+        return reply.code(404).send({ error: "stem_not_available" });
+      }
+      if (job.mode === "split" && name === "no_vocals") {
         return reply.code(404).send({ error: "stem_not_available" });
       }
 

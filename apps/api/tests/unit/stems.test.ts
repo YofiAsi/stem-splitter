@@ -178,6 +178,34 @@ describe("GET /api/jobs/:id/stems/:name", () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it("returns 404 when requesting stem on no_vocals-mode job", async () => {
+    vi.mocked(getJob).mockReturnValue(readyJob({ mode: "no_vocals" }) as any);
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/jobs/${TEST_UUID}/stems/vocals`,
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ error: "stem_not_available" });
+  });
+
+  it("allows 'no_vocals' stem on no_vocals-mode job", async () => {
+    vi.mocked(getJob).mockReturnValue(readyJob({ mode: "no_vocals" }) as any);
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/jobs/${TEST_UUID}/stems/no_vocals`,
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("returns 404 when requesting 'no_vocals' on split-mode job", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/jobs/${TEST_UUID}/stems/no_vocals`,
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ error: "stem_not_available" });
+  });
+
   it("returns 410 when file is missing on disk", async () => {
     const err = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
     vi.mocked(stat).mockRejectedValue(err);

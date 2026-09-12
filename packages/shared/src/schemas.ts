@@ -16,7 +16,7 @@ export const SearchQuerySchema = z.object({
 export const StemFormatSchema = z.enum(["mp3", "wav"]);
 export type StemFormat = z.infer<typeof StemFormatSchema>;
 
-export const JobModeSchema = z.enum(["split", "original"]);
+export const JobModeSchema = z.enum(["split", "original", "no_vocals"]);
 export type JobMode = z.infer<typeof JobModeSchema>;
 
 export const JobStatusSchema = z.enum([
