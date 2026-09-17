@@ -162,8 +162,8 @@ export function App() {
     <div className="container">
       <h1>stem-splitter</h1>
       <p className="muted">
-        Search YouTube, separate into vocals / drums / bass / other, or just
-        download the original audio.
+        Search YouTube, separate into vocals / drums / bass / other, grab a
+        vocal-free version, or just download the original audio.
       </p>
 
       {!job && (
@@ -271,6 +271,18 @@ export function App() {
                 href={stemDownloadUrl(job.id, "original")}
               >
                 ⬇ Download {job.format.toUpperCase()}
+              </a>
+            </div>
+          )}
+
+          {job.status === "ready" && job.mode === "no_vocals" && (
+            <div className="original-player">
+              <audio controls src={stemUrl(job.id, "no_vocals")} />
+              <a
+                className="download-btn"
+                href={stemDownloadUrl(job.id, "no_vocals")}
+              >
+                ⬇ Download {job.format.toUpperCase()} (no vocals)
               </a>
             </div>
           )}

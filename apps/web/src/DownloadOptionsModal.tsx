@@ -86,6 +86,13 @@ export function DownloadOptionsModal({ item, onCancel, onStart }: Props) {
             >
               Original
             </button>
+            <button
+              type="button"
+              className={mode === "no_vocals" ? "active" : ""}
+              onClick={() => setMode("no_vocals")}
+            >
+              No vocals
+            </button>
           </div>
         </div>
 
